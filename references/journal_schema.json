@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ts", "source", "source_hash", "run_id", "stage"],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["started", "maker_done", "checker_done", "fix_attempted", "checker_recheck", "needs_human", "done", "skipped"]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "issues": {
+      "type": "array"
+    },
+    "fix_details": {
+      "type": ["string", "null"]
+    },
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "maker_done"
+          }
+        }
+      },
+      "then": {
+        "required": ["artifacts"],
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "enum": ["checker_done", "needs_human"]
+          }
+        }
+      },
+      "then": {
+        "required": ["issues"],
+        "properties": {
+          "issues": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "fix_attempted"
+          }
+        }
+      },
+      "then": {
+        "required": ["fix_details"],
+        "properties": {
+          "fix_details": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}
