@@ -4,8 +4,24 @@ No LLM — pure filesystem + text parsing. Handles iCloud locking via git fallba
 """
 
 import json, os, sys, subprocess, re
+from pathlib import Path
 
-VAULT = "/Users/zhuyunjiang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Vault"
+def _default_vault():
+    """Read vault_root from ~/.hermes/ingestion/config.json, fall back to env var."""
+    config_paths = [
+        os.path.expanduser("~/.hermes/ingestion/config.json"),
+    ]
+    for cp in config_paths:
+        try:
+            with open(cp) as f:
+                cfg = json.load(f)
+            if cfg.get("vault_root"):
+                return cfg["vault_root"]
+        except Exception:
+            pass
+    return os.environ.get("WIKI_VAULT_ROOT", "")
+
+VAULT = _default_vault()
 FRONTMATTER_RE = re.compile(r"^\ufeff?(?:[ \t]*\r?\n)*---\r?\n(.*?)\r?\n---(?:\r?\n|$)", re.DOTALL)
 INLINE_TAGS_RE = re.compile(r"(?m)^[ \t]*tags[ \t]*:[ \t]*\[(.*?)\][ \t]*$")
 LIST_TAGS_RE = re.compile(

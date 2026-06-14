@@ -174,3 +174,4 @@ After loop completes:
 
 - `references/checker.py`: Deterministic Checker implementation (Python, no LLM)
 - `references/journal_schema.json`: Journal entry JSON schema
+- `references/ecs-deploy.md`: ECS HK deployment via git bundle
