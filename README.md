@@ -1,5 +1,7 @@
 # Wiki Loop Ingest
 
+[中文版](README_zh.md)
+
 A skill for batch Wiki ingestion that turns the manual "ingest → continue → continue" cycle into a semi-autonomous loop. Built on Loop Engineering principles: a scheduler reads the queue, the Maker runs the existing ingest pipeline to generate Wiki pages, and an independent Checker performs deterministic verification — stop immediately on failure, proceed only on success.
 
 ## What it does
