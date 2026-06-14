@@ -4,7 +4,7 @@ description: Loop Engineering for Wiki ingestion — batch process raw sources w
 version: 1.0.0
 ---
 
-# Wiki Loop Ingest — Loop Engineering for jimu's Wiki
+# Wiki Loop Ingest — Loop Engineering for LLM Wiki
 
 Replaces the manual "消化 → 继续 → 继续" cycle with a semi-autonomous loop. State lives locally (not on iCloud), Maker and Checker are separated, auto-fix is restricted to whitelisted mechanical errors only.
 
@@ -31,7 +31,7 @@ Replaces the manual "消化 → 继续 → 继续" cycle with a semi-autonomous 
 ## Pre-requisites
 
 - `~/.hermes/ingestion/config.json` exists (created on first run)
-- `~/.hermes/ingestion/run_journal.jsonl` exists (append-only log)
+- `~/.hermes/ingestion/run_journal.jsonl` exists (append-only log). If missing, create with `touch ~/.hermes/ingestion/run_journal.jsonl` — the journal starts empty and grows via append-only writes.
 - Vault path matches config.vault_root
 - `wiki/SCHEMA.md`, `wiki/index.md`, `wiki/log.md` exist
 
