@@ -52,12 +52,3 @@
 4. 成功则写入 journal 并继续，失败则立刻停下汇报
 
 单篇材料不建议走这个 skill，直接用单文件 ingest 更轻。
-
-## ECS 部署说明
-
-ECS 部署建议按 `references/ecs-deploy.md` 里的方式，用 `git bundle` 同步，而不是逐文件 `scp`。原因很简单：跨海链路下小文件传输不稳定，bundle 把整个 repo 打成一个文件，成功率更高。
-
-另外要注意：
-
-- `checker.py` 依赖 `~/.hermes/ingestion/config.json` 里的 `vault_root`
-- ECS 上没有 iCloud，同步这个 skill 之外，还需要把对应 Wiki vault 以 git clone 或其他稳定方式放到目标路径
