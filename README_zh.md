@@ -1,6 +1,6 @@
 # Wiki Loop Ingest
 
-一个用于批量 Wiki 消化的 skill，把原本手动的"消化 → 继续 → 继续"流程改成半自动循环。基于 Loop Engineering 思路：调度层读取队列，Maker 调用现有 ingest 流程生成 Wiki 页面，独立 Checker 做确定性校验——失败立即停止，成功再继续下一个。
+一个用于批量 LLM Wiki 消化的 skill，把原本手动的"消化 → 继续 → 继续"流程改成半自动循环。基于 Loop Engineering 思路：调度层读取队列，Maker 调用现有 ingest 流程生成 Wiki 页面，独立 Checker 做确定性校验——失败立即停止，成功再继续下一个。
 
 ## 它做什么
 
