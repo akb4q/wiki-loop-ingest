@@ -63,8 +63,14 @@ Replaces the manual "消化 → 继续 → 继续" cycle with a semi-autonomous 
 │     - Load obsidian-ingest-raw skill steps         │
 │     - Read SCHEMA.md, index.md, log.md             │
 │     - Create wiki/sources/<name>.md                │
+│       → Add raw frontmatter with sha256 of body    │
 │     - Create wiki/entities/<author>.md if new      │
 │     - Create wiki/concepts/<idea>.md if new        │
+│     - If synthesizing 3+ sources, append           │
+│       provenance markers: `^[raw/articles/...]`    │
+│       to each paragraph                            │
+│     - Set confidence/contested in frontmatter      │
+│       for opinion-heavy pages                      │
 │     - Update index.md via block anchor patches     │
 │     - Update log.md                                │
 │     - Wait 3-5 seconds for iCloud sync             │
@@ -126,6 +132,8 @@ The Checker runs deterministic file-level checks. It should NOT be the same LLM 
 | 9 | `log.md` has a new entry for this source | grep source path in log | ✅ fix_once |
 | 10 | No duplicate filenames across `wiki/sources`, `wiki/concepts`, `wiki/entities` | full-library filename uniqueness scan | ❌ needs_human |
 | 11 | No orphan pages in `wiki/concepts` or `wiki/entities` | cross-reference filenames against `index.md` content | ❌ needs_human |
+| 12 | Stale content: wiki pages with `updated` >90d behind latest matching source | compare `updated` dates vs sources that mention the same entity | ❌ needs_human |
+| 13 | Contradictions: pages sharing tags with conflicting claims, or `contested` frontmatter without `contradictions` entry | scan frontmatter for `contested: true` and verify `contradictions` field is set | ❌ needs_human |
 
 ### Auto-fix whitelist (from config):
 

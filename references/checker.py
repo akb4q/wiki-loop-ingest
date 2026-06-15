@@ -3,7 +3,7 @@
 No LLM — pure filesystem + text parsing. Handles iCloud locking via git fallback.
 """
 
-import json, os, sys, subprocess, re
+import json, os, sys, subprocess, re, datetime
 from pathlib import Path
 
 def _default_vault():
@@ -203,6 +203,55 @@ def check_log(source_rel, vault_root=VAULT):
     return {"pass": False, "error": "log_entry_missing", "auto_fix_type": "log_entry_missing", "source": source_rel}
 
 
+def check_stale_content(vault_root=VAULT):
+    """Flag pages whose `updated` is >90 days behind."""
+    today = datetime.date.today()
+    cutoff = today - datetime.timedelta(days=90)
+    stale = []
+    for rel_dir in ["wiki/concepts", "wiki/entities", "wiki/comparisons"]:
+        abs_dir = os.path.join(vault_root, rel_dir)
+        if not os.path.isdir(abs_dir):
+            continue
+        for name in sorted(f for f in os.listdir(abs_dir) if f.endswith(".md")):
+            path = os.path.join(abs_dir, name)
+            try:
+                c = safe_read(path, os.path.join(rel_dir, name), vault_root)
+                fm = parse_frontmatter(c)
+                if fm:
+                    m = re.search(r"(?m)^updated[ \t]*:[ \t]*(\d{4}-\d{2}-\d{2})", fm)
+                    if m:
+                        updated = datetime.date.fromisoformat(m.group(1))
+                        if updated < cutoff:
+                            stale.append({"file": os.path.join(rel_dir, name), "updated": m.group(1)})
+            except Exception:
+                pass
+    if stale:
+        return {"pass": False, "error": "stale_content", "stale": stale}
+    return {"pass": True}
+
+
+def check_contradictions(vault_root=VAULT):
+    """Check pages with `contested: true` but missing or empty `contradictions` field."""
+    issues = []
+    for rel_dir in ["wiki/concepts", "wiki/entities"]:
+        abs_dir = os.path.join(vault_root, rel_dir)
+        if not os.path.isdir(abs_dir):
+            continue
+        for name in sorted(f for f in os.listdir(abs_dir) if f.endswith(".md")):
+            path = os.path.join(abs_dir, name)
+            try:
+                c = safe_read(path, os.path.join(rel_dir, name), vault_root)
+                fm = parse_frontmatter(c)
+                if fm and re.search(r"(?m)^contested[ \t]*:[ \t]*true", fm):
+                    if not re.search(r"(?m)^contradictions[ \t]*:[ \t]*\[.+\]", fm):
+                        issues.append({"file": os.path.join(rel_dir, name), "error": "contested_true_but_no_contradictions_field"})
+            except Exception:
+                pass
+    if issues:
+        return {"pass": False, "error": "contradiction_issues", "issues": issues}
+    return {"pass": True}
+
+
 def check_dupes(vault_root=VAULT):
     seen = {}
     dupes = []
@@ -283,6 +332,14 @@ def run(artifacts, source_rel, vault_root=VAULT):
 
     r = check_orphans(vault_root)
     results.append({"file": "wiki/index.md", "check": "orphan_pages", **r})
+    if not r["pass"]: all_pass = False
+
+    r = check_stale_content(vault_root)
+    results.append({"file": "various", "check": "stale_content", **r})
+    if not r["pass"]: all_pass = False
+
+    r = check_contradictions(vault_root)
+    results.append({"file": "various", "check": "contradictions", **r})
     if not r["pass"]: all_pass = False
 
     issues = [x for x in results if not x.get("pass")]
