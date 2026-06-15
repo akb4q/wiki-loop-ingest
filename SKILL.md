@@ -1,7 +1,7 @@
 ---
 name: wiki-loop-ingest
 description: Loop Engineering for Wiki ingestion — batch process raw sources with independent Checker, journal-based state, and human gate. Triggers on "消化队列" or "ingest batch".
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Wiki Loop Ingest — Loop Engineering for LLM Wiki
@@ -121,13 +121,14 @@ The Checker runs deterministic file-level checks. It should NOT be the same LLM 
 
 | # | Check | Method | Auto-fix? |
 |---|-------|--------|-----------|
-| 1 | source file has valid frontmatter (`title`, `source`, `tags`) | parse YAML frontmatter block with BOM/CRLF/leading blank support | ✅ fix_once |
-| 2 | tag taxonomy is available from `wiki/SCHEMA.md` | parse schema tags; unreadable/empty schema fails closed | ❌ needs_human |
+| 1 | raw source file has valid frontmatter (`source_required_frontmatter`, default `title`, `source`, `tags`) | parse YAML frontmatter block with BOM/CRLF/leading blank support | ✅ fix_once |
+| 2 | tag taxonomy is available from schema file | parse schema tags via `schema_tag_regex` (default matches `` `slug` / gloss ``); unreadable/empty schema fails closed | ❌ needs_human |
 | 3 | source file has content | `os.path.getsize() > 0` | ❌ needs_human |
 | 4 | each declared artifact path exists | filesystem existence check | ❌ needs_human |
-| 5 | each artifact has valid frontmatter (`title`, `source`, `tags`) | parse YAML frontmatter block | ✅ fix_once |
-| 6 | all artifact tags appear in `SCHEMA.md` taxonomy | parse inline or YAML-list `tags` and validate membership | ✅ fix_once (map to closest) |
-| 7 | artifact wikilinks resolve | check `[[...]]` targets exist in `wiki/sources`, `wiki/concepts`, `wiki/entities` | ❌ needs_human |
+| 5 | each artifact has valid frontmatter (`required_frontmatter`, default `title`, `tags` — wiki pages use plural `sources:`, not `source:`) | parse YAML frontmatter block | ✅ fix_once |
+| 6a | each tag is a well-formed slug (lowercase-hyphen; no spaces, slashes, uppercase, or CJK) | raw split on `,`/`，` then `valid_slug_regex` — catches bilingual `x / 中文` before tokenization silently drops it | ✅ fix_once |
+| 6b | all artifact tags appear in the schema taxonomy | parse inline or YAML-list `tags` and validate membership | ✅ fix_once (map to closest) |
+| 7 | artifact wikilinks resolve | check `[[...]]` targets (bare or path-prefixed `[[dir/stem]]`) exist in artifact dirs | ❌ needs_human |
 | 8 | `index.md` stat counters match actual file counts | count files vs stat lines | ✅ fix_once |
 | 9 | `log.md` has a new entry for this source | grep source path in log | ✅ fix_once |
 | 10 | No duplicate filenames across `wiki/sources`, `wiki/concepts`, `wiki/entities` | full-library filename uniqueness scan | ❌ needs_human |
@@ -144,9 +145,29 @@ The Checker runs deterministic file-level checks. It should NOT be the same LLM 
 
 All other failures → `needs_human`, STOP.
 
-## iCloud File Locking
+## Configuration
 
-Same workaround as `obsidian-ingest-raw`:
+All vault-specific assumptions live in `config.json` (default `~/.hermes/ingestion/config.json`, overridable via `$WIKI_INGEST_CONFIG` or `checker.py --config`). Every key has a default that reproduces the reference Obsidian layout, so a minimal config only needs `vault_root`. Override any of these to adapt the checker to a different LLM-wiki without editing code:
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `vault_root` | — (required) | absolute path to the wiki root |
+| `schema_file` / `index_file` / `log_file` | `wiki/SCHEMA.md` / `wiki/index.md` / `wiki/log.md` | core files |
+| `dirs` | `{sources, concepts, entities, comparisons, queries}` | dir key → relative path; the key doubles as the `^stat-<key>` index anchor |
+| `artifact_dir_keys` | `[sources, concepts, entities]` | which dirs hold linkable/dedup-checked pages |
+| `orphan_dir_keys` | `[concepts, entities]` | which dirs are scanned for orphans |
+| `page_dir_keys` | `[concepts, entities, comparisons]` | which dirs are scanned for stale/contradiction |
+| `required_frontmatter` | `[title, tags]` | required fields on generated artifacts |
+| `source_required_frontmatter` | `[title, source, tags]` | required fields on the raw input file |
+| `schema_tag_regex` | `` `([a-z][a-z0-9-]*)`\s*/ `` | extracts valid slugs from the schema file (closing backtick required) |
+| `valid_slug_regex` | `^[a-z][a-z0-9-]*$` | shape a single tag must match |
+| `icloud_git_fallback` | `true` | read locked files via `git show HEAD:` (set `false` for non-iCloud vaults) |
+| `stale_days` | `90` | age threshold for stale content |
+| `auto_fix_whitelist` | see below | which errors get one mechanical fix attempt |
+
+## iCloud File Locking (optional, `icloud_git_fallback`)
+
+For vaults synced via iCloud Drive, files may be transiently unreadable. When `icloud_git_fallback` is true, the same workaround as `obsidian-ingest-raw` applies:
 - Read locked files: `git show HEAD:<path>`
 - Write locked files: edit in /tmp, then `git hash-object -w /tmp/x && git update-index --add --cacheinfo 100644 <hash> <path> && git checkout -f -- <path>`
 - After Maker writes, wait 3-5 seconds before Checker reads (avoid sync-delay false positives)
@@ -166,8 +187,12 @@ Before processing a source:
 3. **Stop immediately on `needs_human`.** Don't continue to next file. The user needs to know what failed and why before the batch proceeds.
 4. **Journal is append-only.** Never rewrite or truncate. Each entry is one JSON line. Use `>>` not `>`.
 5. **Git commit after each successful file.** Don't batch commits — if the system crashes, you want per-file granularity.
-6. **iCloud sync delay:** Always wait 3-5 seconds between Maker write and Checker read.
+8. **iCloud sync delay:** Always wait 3-5 seconds between Maker write and Checker read.
+9. **ECS sync via git bundle:** Use `git fetch + reset --hard FETCH_HEAD` not `git pull` — ECS may have divergent history. See `references/ecs-deploy.md` for full workflow.
 7. **The journal IS the source of truth for what was ingested.** Not log.md. Not index.md. The journal with hashes.
+8. **Never fabricate examples when explaining the skill's features.** If you need to illustrate provenance markers, confidence fields, or any other mechanism, use real code/config from the repo or state "example is illustrative — not from production." Fabricated claims undermine trust in actual functionality.
+9. **Parallel subagent > per-file loop for 5+ articles.** When batch is large (5+), the per-file Maker-Checker loop is too slow. Use `delegate_task` parallel pattern instead (see `obsidian-ingest-raw` → `references/parallel-subagent-batch-ingest.md`). Subagents create source + concept pages; parent reconciles index.md/log.md at the end. This is ~10 min for 13 articles vs hours for sequential loop.
+10. **Don't trust subagent STATS_DELTA after parallel run.** Each subagent computes deltas from a stale baseline. After all subagents finish, rebuild index.md stats from `git ls-tree HEAD wiki/` — not from subagent-reported deltas.
 
 ## Verification
 
