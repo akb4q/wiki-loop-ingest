@@ -29,6 +29,9 @@ LIST_TAGS_RE = re.compile(
 )
 TAG_TOKEN_RE = re.compile(r"([a-z][a-z0-9-]*)")
 SCHEMA_TAG_RE = re.compile(r"`([a-z][a-z0-9-]*)\s*/")
+# Valid slug: lowercase ASCII, digits, hyphens only. Rejects bilingual ("x / 中文"),
+# multi-word ("AI agent"), uppercase ("AI"), and CJK-only tags.
+VALID_SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 def resolve_path(vault_root, path):
@@ -108,6 +111,22 @@ def check_fm(abs_path, rel_path, vault_root=VAULT):
     return {"pass": True}
 
 
+def _raw_tag_strings(frontmatter):
+    """Return the raw comma-split tag strings before any tokenization."""
+    m = INLINE_TAGS_RE.search(frontmatter)
+    if m:
+        return [t.strip() for t in re.split(r"[,，]", m.group(1)) if t.strip()]
+    m = LIST_TAGS_RE.search(frontmatter)
+    if not m:
+        return []
+    raw = []
+    for line in m.group(1).splitlines():
+        item = re.match(r"^[ \t]+-[ \t]*([^\r\n#]+)", line)
+        if item:
+            raw.append(item.group(1).strip())
+    return raw
+
+
 def check_tags(abs_path, rel_path, valid_tags, vault_root=VAULT):
     try:
         c = safe_read(abs_path, rel_path, vault_root)
@@ -116,6 +135,16 @@ def check_tags(abs_path, rel_path, valid_tags, vault_root=VAULT):
     frontmatter = parse_frontmatter(c)
     if not frontmatter:
         return {"pass": True}
+    # Layer 1: raw format — catch bilingual ("x / 中文"), multi-word ("AI agent"),
+    # uppercase ("AI"), CJK-only tags before tokenization silently drops them.
+    raw_tags = _raw_tag_strings(frontmatter)
+    bad_format = [t for t in raw_tags if not VALID_SLUG_RE.match(t)]
+    if bad_format:
+        return {"pass": False, "error": "invalid_tag_format",
+                "auto_fix_type": "tag_not_in_schema",
+                "detail": "tags must be lowercase-hyphen slugs (no spaces, slashes, uppercase, or CJK)",
+                "invalid_format": bad_format}
+    # Layer 2: taxonomy membership
     file_tags = extract_tags(frontmatter)
     invalid = [t for t in file_tags if t not in valid_tags]
     if invalid:
